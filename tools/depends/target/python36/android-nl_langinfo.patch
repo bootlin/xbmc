@@ -1,0 +1,71 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -3437,7 +3437,7 @@
+  getpriority getresuid getresgid getpwent getspnam getspent getsid getwd \
+  initgroups kill killpg lchmod lchown linkat lstat lutimes mmap \
+  memrchr mbrtowc mkdirat mkfifo \
+- mkfifoat mknod mknodat mktime mremap nice openat pathconf pause pipe2 plock poll \
++ mkfifoat mknod mknodat mktime mremap nice nl_langinfo openat pathconf pause pipe2 plock poll \
+  posix_fallocate posix_fadvise pread \
+  pthread_init pthread_kill putenv pwrite readlink readlinkat readv realpath renameat \
+  select sem_open sem_timedwait sem_getvalue sem_unlink sendfile setegid seteuid \
+--- a/Modules/_localemodule.c
++++ b/Modules/_localemodule.c
+@@ -343,7 +343,7 @@
+ }
+ #endif
+ 
+-#ifdef HAVE_LANGINFO_H
++#if defined(HAVE_LANGINFO_H) && defined(HAVE_NL_LANGINFO)
+ #define LANGINFO(X) {#X, X}
+ static struct langinfo_constant{
+     char* name;
+@@ -608,7 +608,7 @@
+ #if defined(MS_WINDOWS)
+   {"_getdefaultlocale", (PyCFunction) PyLocale_getdefaultlocale, METH_NOARGS},
+ #endif
+-#ifdef HAVE_LANGINFO_H
++#if defined(HAVE_LANGINFO_H) && defined(HAVE_NL_LANGINFO)
+   {"nl_langinfo", (PyCFunction) PyLocale_nl_langinfo,
+    METH_VARARGS, nl_langinfo__doc__},
+ #endif
+@@ -648,7 +648,7 @@
+ PyInit__locale(void)
+ {
+     PyObject *m;
+-#ifdef HAVE_LANGINFO_H
++#if defined(HAVE_LANGINFO_H) && defined(HAVE_NL_LANGINFO)
+     int i;
+ #endif
+ 
+@@ -676,7 +676,7 @@
+     }
+     PyModule_AddObject(m, "Error", Error);
+ 
+-#ifdef HAVE_LANGINFO_H
++#if defined(HAVE_LANGINFO_H) && defined(HAVE_NL_LANGINFO)
+     for (i = 0; langinfo_constants[i].name; i++) {
+         PyModule_AddIntConstant(m, langinfo_constants[i].name,
+                                 langinfo_constants[i].value);
+--- a/Python/fileutils.c
++++ b/Python/fileutils.c
+@@ -60,7 +60,7 @@
+        has no console */
+     if (cp != 0)
+         return PyUnicode_FromFormat("cp%u", (unsigned int)cp);
+-#elif defined(CODESET)
++#elif defined(HAVE_NL_LANGINFO) && defined(CODESET)
+     {
+         char *codeset = nl_langinfo(CODESET);
+         if (codeset != NULL && codeset[0] != 0)
+--- a/Python/pylifecycle.c
++++ b/Python/pylifecycle.c
+@@ -229,7 +229,7 @@
+     char codepage[100];
+     PyOS_snprintf(codepage, sizeof(codepage), "cp%d", GetACP());
+     return get_codec_name(codepage);
+-#elif defined(HAVE_LANGINFO_H) && defined(CODESET)
++#elif defined(HAVE_LANGINFO_H) && defined(HAVE_NL_LANGINFO) && defined(CODESET)
+     char* codeset = nl_langinfo(CODESET);
+     if (!codeset || codeset[0] == '\0') {
+         PyErr_SetString(PyExc_ValueError, "CODESET is not set or empty");
