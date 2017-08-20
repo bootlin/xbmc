@@ -6,7 +6,7 @@ endif
 
 NATIVE= m4-native gettext-native autoconf-native automake-native \
         libtool-native pkg-config-native yasm-native cmake-native \
-        gas-preprocessor-native python27-native zlib-native \
+        gas-preprocessor-native python3-native zlib-native \
         pcre-native swig-native \
         libpng-native libjpeg-turbo-native liblzo2-native giflib-native \
         distribute-native distutilscross-native JsonSchemaBuilder TexturePacker
@@ -22,7 +22,7 @@ endif
 
 ifeq ($(OS),linux)
   ifeq ($(TARGET_PLATFORM),$(filter $(TARGET_PLATFORM),raspberry-pi aml gbm))
-    NATIVE += meson-native ninja-native python3-native
+    NATIVE += meson-native ninja-native
   endif
 endif
 
@@ -44,10 +44,9 @@ libpng-native: zlib-native
 meson-native: python3-native
 ninja-native: python3-native
 swig-native: pcre-native
-distribute-native: python27-native
-distutilscross-native: python27-native distribute-native
+distribute-native: python3-native
+distutilscross-native: python3-native distribute-native
 tar-native: xz-native automake-native
-python27-native: zlib-native
 python3-native: $(EXPAT) zlib-native
 wayland-scanner-native: expat-native
 waylandpp-scanner-native: cmake-native
