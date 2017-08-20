@@ -1,5 +1,5 @@
 include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile crosscompile.patch android.patch \
+DEPS= ../../Makefile.include Makefile apple.patch crosscompile.patch android.patch \
        fix-datetime.patch modules.setup make-fork-optional.patch android-nl_langinfo.patch
 
 # lib name, version
@@ -38,6 +38,7 @@ $(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
 	cd $(PLATFORM); patch -p0 < ../android.patch
 	cd $(PLATFORM); patch -p0 < ../fix-ffi.patch
 	cd $(PLATFORM); patch -p1 -i ../android-nl_langinfo.patch
+	cd $(PLATFORM); patch -p1 -i ../apple.patch
 ifeq ($(OS),ios)
 	cd $(PLATFORM); patch -p0 < ../make-fork-optional.patch
 	cd $(PLATFORM); sed -ie 's|MACHDEP="unknown"|MACHDEP="darwin"|' configure.ac
