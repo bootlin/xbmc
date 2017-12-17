@@ -8,10 +8,10 @@
   </requires>
 	<extension point="xbmc.addon.repository">
 		<!-- Do not forget to bump add-on version when changing paths to force a repo refresh -->
-		<info>http://mirrors.kodi.tv/addons/leia/addons.xml.gz</info>
-		<checksum verify="sha256">http://mirrors.kodi.tv/addons/leia/addons.xml.gz?sha256</checksum>
-		<datadir>https://mirrors.kodi.tv/addons/leia</datadir>
-		<artdir>http://mirrors.kodi.tv/addons/leia</artdir>
+		<info>http://mirrors.kodi.tv/addons/migration/addons.xml.gz</info>
+		<checksum verify="sha256">http://mirrors.kodi.tv/addons/migration/addons.xml.gz?sha256</checksum>
+		<datadir>https://mirrors.kodi.tv/addons/migration</datadir>
+		<artdir>http://mirrors.kodi.tv/addons/migration</artdir>
 		<hashes>sha256</hashes>
 	</extension>
 	<extension point="xbmc.addon.metadata">
