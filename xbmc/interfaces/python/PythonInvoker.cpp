@@ -297,10 +297,7 @@ bool CPythonInvoker::execute(const std::string &script, const std::vector<std::w
         return false;
       }
 #endif
-      PyObject* ioMod = PyImport_ImportModule("io");
-      PyObject* openedFile = PyObject_CallMethod(ioMod, "open", "ss", (char *)nativeFilename.c_str(), "r");
-      Py_DECREF(ioMod);
-      FILE *fp = PyFile_AsFileWithMode(openedFile, (char *)"r");
+      FILE *fp = _Py_fopen((char *)nativeFilename.c_str(), "r");
 
       if (fp != NULL)
       {
