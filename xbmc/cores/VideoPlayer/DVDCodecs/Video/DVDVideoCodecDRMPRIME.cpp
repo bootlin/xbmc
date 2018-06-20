@@ -171,36 +171,23 @@ void CDVDVideoCodecDRMPRIME::Register()
   CDVDFactoryCodec::RegisterHWVideoCodec("drm_prime", CDVDVideoCodecDRMPRIME::Create);
 }
 
-static const AVCodecHWConfig* FindHWConfig(const AVCodec* codec)
-{
-  const AVCodecHWConfig* config = nullptr;
-  for (int n = 0; (config = avcodec_get_hw_config(codec, n)); n++)
-  {
-    if (config->pix_fmt != AV_PIX_FMT_DRM_PRIME)
-      continue;
-
-    if ((config->methods & AV_CODEC_HW_CONFIG_METHOD_INTERNAL))
-      return config;
-  }
-
-  return nullptr;
-}
-
-static const AVCodec* FindDecoder(CDVDStreamInfo& hints)
+const AVCodec* CDVDVideoCodecDRMPRIME::FindDecoder(CDVDStreamInfo& hints)
 {
   const AVCodec* codec = nullptr;
   void *i = 0;
 
   while ((codec = av_codec_iterate(&i)))
   {
-    if (!av_codec_is_decoder(codec))
-      continue;
-    if (codec->id != hints.codec)
-      continue;
-
-    const AVCodecHWConfig* config = FindHWConfig(codec);
-    if (config)
-      return codec;
+    if (av_codec_is_decoder(codec) && codec->id == hints.codec && codec->pix_fmts)
+    {
+      const AVPixelFormat* fmt = codec->pix_fmts;
+      while (*fmt != AV_PIX_FMT_NONE)
+      {
+        if (*fmt == AV_PIX_FMT_DRM_PRIME)
+          return codec;
+        fmt++;
+      }
+    }
   }
 
   return nullptr;
@@ -221,7 +208,6 @@ bool CDVDVideoCodecDRMPRIME::Open(CDVDStreamInfo& hints, CDVDCodecOptions& optio
   if (!m_pCodecContext)
     return false;
 
-  m_pCodecContext->pix_fmt = AV_PIX_FMT_DRM_PRIME;
   m_pCodecContext->codec_tag = hints.codec_tag;
   m_pCodecContext->coded_width = hints.width;
   m_pCodecContext->coded_height = hints.height;
