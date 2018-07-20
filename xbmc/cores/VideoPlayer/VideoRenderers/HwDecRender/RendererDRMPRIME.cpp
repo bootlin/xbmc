@@ -229,21 +229,22 @@ void CRendererDRMPRIME::SetVideoPlane(CVideoBufferDRMPRIME* buffer)
 
     if(m_DRM->m_req)
     {
-      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_primary_plane, "FB_ID",   buffer->m_fb_id);
-      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_primary_plane, "CRTC_ID", m_DRM->m_crtc->crtc->crtc_id);
-      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_primary_plane, "SRC_X",   src_x);
-      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_primary_plane, "SRC_Y",   src_y);
-      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_primary_plane, "SRC_W",   src_w);
-      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_primary_plane, "SRC_H",   src_h);
-      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_primary_plane, "CRTC_X",  crtc_x);
-      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_primary_plane, "CRTC_Y",  crtc_y);
-      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_primary_plane, "CRTC_W",  crtc_w);
-      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_primary_plane, "CRTC_H",  crtc_h);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "FB_ID",   buffer->m_fb_id);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "CRTC_ID", m_DRM->m_crtc->crtc->crtc_id);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "SRC_X",   src_x);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "SRC_Y",   src_y);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "SRC_W",   src_w);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "SRC_H",   src_h);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "CRTC_X",  crtc_x);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "CRTC_Y",  crtc_y);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "CRTC_W",  crtc_w);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "CRTC_H",  crtc_h);
+      m_DRM->AddProperty(m_DRM->m_req, m_DRM->m_overlay_plane, "zpos",  0);
     }
     else
     {
       // show the video frame FB on the video plane
-      ret = drmModeSetPlane(m_DRM->m_fd, m_DRM->m_primary_plane->plane->plane_id, m_DRM->m_crtc->crtc->crtc_id, buffer->m_fb_id, 0,
+      ret = drmModeSetPlane(m_DRM->m_fd, m_DRM->m_overlay_plane->plane->plane_id, m_DRM->m_crtc->crtc->crtc_id, buffer->m_fb_id, 0,
                             crtc_x, crtc_y, crtc_w, crtc_h,
                             src_x, src_y, src_w, src_h);
       if (ret < 0)
