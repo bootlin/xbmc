@@ -26,7 +26,9 @@
 #include "cores/VideoPlayer/Process/VideoBuffer.h"
 
 extern "C" {
+#include "libavcodec/avcodec.h"
 #include "libavutil/frame.h"
+#include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_drm.h"
 }
 
@@ -72,12 +74,20 @@ public:
 
 protected:
   const AVCodec* FindDecoder(CDVDStreamInfo& hints);
+  bool HWAccelEnabled();
+  static enum AVPixelFormat GetFormatVAAPI(struct AVCodecContext* avctx, const AVPixelFormat* fmt);
   void Drain();
   void SetPictureParams(VideoPicture* pVideoPicture);
 
   std::string m_name;
   int m_codecControlFlags = 0;
+  enum AVHWDeviceType m_HWDeviceType = AV_HWDEVICE_TYPE_NONE;
   AVCodecContext* m_pCodecContext = nullptr;
+  AVBufferRef* m_pHWDeviceRef = nullptr;
+  AVBufferRef* m_pHWDRMDeviceRef = nullptr;
+  AVBufferRef* m_pHWFrameRef = nullptr;
+  AVBufferRef* m_pHWDRMFrameRef = nullptr;
   AVFrame* m_pFrame = nullptr;
+  AVFrame* m_pHWFrame = nullptr;
   std::shared_ptr<CVideoBufferPoolDRMPRIME> m_videoBufferPool;
 };

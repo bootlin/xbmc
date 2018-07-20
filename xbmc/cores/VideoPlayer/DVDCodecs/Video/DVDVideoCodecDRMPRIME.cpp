@@ -25,12 +25,14 @@
 #include "settings/Settings.h"
 #include "threads/SingleLock.h"
 #include "utils/log.h"
+#include "windowing/gbm/WinSystemGbm.h"
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
 extern "C" {
 #include "libavcodec/avcodec.h"
+#include "libavutil/hwcontext.h"
 #include "libavutil/pixdesc.h"
 }
 
@@ -150,12 +152,14 @@ CDVDVideoCodecDRMPRIME::CDVDVideoCodecDRMPRIME(CProcessInfo& processInfo)
   : CDVDVideoCodec(processInfo)
 {
   m_pFrame = av_frame_alloc();
+  m_pHWFrame = av_frame_alloc();
   m_videoBufferPool = std::make_shared<CVideoBufferPoolDRMPRIME>();
 }
 
 CDVDVideoCodecDRMPRIME::~CDVDVideoCodecDRMPRIME()
 {
   av_frame_free(&m_pFrame);
+  av_frame_free(&m_pHWFrame);
   avcodec_free_context(&m_pCodecContext);
 }
 
@@ -173,19 +177,56 @@ void CDVDVideoCodecDRMPRIME::Register()
 
 const AVCodec* CDVDVideoCodecDRMPRIME::FindDecoder(CDVDStreamInfo& hints)
 {
+  enum AVHWDeviceType DRMPrimeDeviceTypes[] = {
+    AV_HWDEVICE_TYPE_VAAPI,
+    AV_HWDEVICE_TYPE_NONE
+  };
   const AVCodec* codec = nullptr;
+  const AVCodecHWConfig* config;
   void *i = 0;
+  bool match;
+  int j, k;
 
   while ((codec = av_codec_iterate(&i)))
   {
-    if (av_codec_is_decoder(codec) && codec->id == hints.codec && codec->pix_fmts)
+    if (av_codec_is_decoder(codec) && codec->id == hints.codec)
     {
-      const AVPixelFormat* fmt = codec->pix_fmts;
-      while (*fmt != AV_PIX_FMT_NONE)
+      if (codec->pix_fmts)
       {
-        if (*fmt == AV_PIX_FMT_DRM_PRIME)
-          return codec;
-        fmt++;
+        const AVPixelFormat* fmt = codec->pix_fmts;
+        while (*fmt != AV_PIX_FMT_NONE)
+        {
+          if (*fmt == AV_PIX_FMT_DRM_PRIME)
+            return codec;
+          fmt++;
+        }
+      } else {
+        for (j = 0;; j++) {
+          config = avcodec_get_hw_config(codec, j);
+          if (!config)
+            break;
+
+          match = false;
+
+          for (j = 0; DRMPrimeDeviceTypes[j] != AV_HWDEVICE_TYPE_NONE; j++)
+          {
+            if (config->device_type == DRMPrimeDeviceTypes[j])
+            {
+              match = true;
+              break;
+            }
+          }
+
+          if (!match)
+            continue;
+
+          if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+              config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_FRAMES_CTX)
+          {
+            m_HWDeviceType = DRMPrimeDeviceTypes[j];
+            return codec;
+          }
+        }
       }
     }
   }
@@ -193,9 +234,25 @@ const AVCodec* CDVDVideoCodecDRMPRIME::FindDecoder(CDVDStreamInfo& hints)
   return nullptr;
 }
 
+bool CDVDVideoCodecDRMPRIME::HWAccelEnabled()
+{
+  return (m_HWDeviceType != AV_HWDEVICE_TYPE_NONE);
+}
+
+enum AVPixelFormat CDVDVideoCodecDRMPRIME::GetFormatVAAPI(struct AVCodecContext* avctx, const AVPixelFormat* fmt)
+{
+  return AV_PIX_FMT_VAAPI; // FIXME
+}
+
 bool CDVDVideoCodecDRMPRIME::Open(CDVDStreamInfo& hints, CDVDCodecOptions& options)
 {
   const AVCodec* pCodec = FindDecoder(hints);
+  AVHWFramesContext* pHWFramesContext;
+  AVHWFramesContext* pHWDRMFramesContext;
+  bool supported;
+  int ret;
+  int i;
+
   if (!pCodec)
   {
     CLog::Log(LOGDEBUG, "CDVDVideoCodecDRMPRIME::%s - unable to find decoder for codec %d", __FUNCTION__, hints.codec);
@@ -207,6 +264,74 @@ bool CDVDVideoCodecDRMPRIME::Open(CDVDStreamInfo& hints, CDVDCodecOptions& optio
   m_pCodecContext = avcodec_alloc_context3(pCodec);
   if (!m_pCodecContext)
     return false;
+
+  if (HWAccelEnabled()) {
+    CWinSystemGbm* winSystem = dynamic_cast<CWinSystemGbm*>(CServiceBroker::GetWinSystem());
+
+    ret = av_hwdevice_ctx_create(&m_pHWDeviceRef, m_HWDeviceType, winSystem->GetDevicePath().c_str(), NULL, 0);
+    if (ret < 0)
+    {
+      CLog::Log(LOGWARNING, "CDVDVideoCodecDRMPRIME::%s - unable to create hardware device context", __FUNCTION__);
+      return false;
+    }
+
+    ret = av_hwdevice_ctx_create(&m_pHWDRMDeviceRef, AV_HWDEVICE_TYPE_DRM, winSystem->GetDevicePath().c_str(), NULL, 0);
+    if (ret < 0)
+    {
+      CLog::Log(LOGWARNING, "CDVDVideoCodecDRMPRIME::%s - unable to create DRM hardware device context", __FUNCTION__);
+      return false;
+    }
+
+    // TODO: av_hwdevice_get_hwframe_constraints
+
+    m_pHWFrameRef = av_hwframe_ctx_alloc(m_pHWDeviceRef);
+    if (!m_pHWFrameRef)
+    {
+      CLog::Log(LOGWARNING, "CDVDVideoCodecDRMPRIME::%s - unable to create hardware frame context", __FUNCTION__);
+      return false;
+    }
+
+    m_pHWDRMFrameRef = av_hwframe_ctx_alloc(m_pHWDRMDeviceRef);
+    if (!m_pHWDRMFrameRef)
+    {
+      CLog::Log(LOGWARNING, "CDVDVideoCodecDRMPRIME::%s - unable to create DRM hardware frame context", __FUNCTION__);
+      return false;
+    }
+
+    pHWFramesContext = (AVHWFramesContext*)(m_pHWFrameRef->data);
+    pHWFramesContext->format = AV_PIX_FMT_VAAPI; // FIXME
+    pHWFramesContext->sw_format = AV_PIX_FMT_NV12; // FIXME
+    pHWFramesContext->width = hints.width;
+    pHWFramesContext->height = hints.height;
+
+    ret = av_hwframe_ctx_init(m_pHWFrameRef);
+    if (ret < 0)
+    {
+      CLog::Log(LOGWARNING, "CDVDVideoCodecDRMPRIME::%s - unable to init hardware frame context", __FUNCTION__);
+      return false;
+    }
+
+    // FIXME: We can also get the DRM hw frame context by deriving the VAAPI hw frame context using the DRM device ref so that it automagically sets the right stuff.
+    pHWDRMFramesContext = (AVHWFramesContext*)(m_pHWDRMFrameRef->data);
+    pHWDRMFramesContext->format = AV_PIX_FMT_DRM_PRIME;
+    pHWDRMFramesContext->sw_format = AV_PIX_FMT_NV12; // FIXME
+    pHWDRMFramesContext->width = hints.width;
+    pHWDRMFramesContext->height = hints.height;
+
+    ret = av_hwframe_ctx_init(m_pHWDRMFrameRef);
+    if (ret < 0)
+    {
+      CLog::Log(LOGWARNING, "CDVDVideoCodecDRMPRIME::%s - unable to init DRM hardware frame context", __FUNCTION__);
+      return false;
+    }
+
+    // TODO: test ability to map to DRM_PRIME
+
+    m_pCodecContext->get_format = GetFormatVAAPI;
+    m_pCodecContext->hw_device_ctx = av_buffer_ref(m_pHWDeviceRef);
+    m_pFrame->hw_frames_ctx = av_buffer_ref(m_pHWDRMFrameRef);
+    m_pHWFrame->hw_frames_ctx = av_buffer_ref(m_pHWFrameRef);
+  }
 
   m_pCodecContext->codec_tag = hints.codec_tag;
   m_pCodecContext->coded_width = hints.width;
@@ -281,6 +406,15 @@ void CDVDVideoCodecDRMPRIME::Reset()
   avcodec_flush_buffers(m_pCodecContext);
   av_frame_unref(m_pFrame);
   m_codecControlFlags = 0;
+
+  if (HWAccelEnabled()) {
+    av_frame_unref(m_pHWFrame);
+
+    av_buffer_unref(&m_pHWFrameRef);
+    av_buffer_unref(&m_pHWDRMFrameRef);
+    av_buffer_unref(&m_pHWDeviceRef);
+    av_buffer_unref(&m_pHWDRMDeviceRef);
+  }
 }
 
 void CDVDVideoCodecDRMPRIME::Drain()
@@ -332,10 +466,15 @@ void CDVDVideoCodecDRMPRIME::SetPictureParams(VideoPicture* pVideoPicture)
 
 CDVDVideoCodec::VCReturn CDVDVideoCodecDRMPRIME::GetPicture(VideoPicture* pVideoPicture)
 {
+  int ret;
+
   if (m_codecControlFlags & DVD_CODEC_CTRL_DRAIN)
     Drain();
 
-  int ret = avcodec_receive_frame(m_pCodecContext, m_pFrame);
+  if (HWAccelEnabled())
+    ret = avcodec_receive_frame(m_pCodecContext, m_pHWFrame);
+  else
+    ret = avcodec_receive_frame(m_pCodecContext, m_pFrame);
   if (ret == AVERROR(EAGAIN))
     return VC_BUFFER;
   else if (ret == AVERROR_EOF)
@@ -344,6 +483,15 @@ CDVDVideoCodec::VCReturn CDVDVideoCodecDRMPRIME::GetPicture(VideoPicture* pVideo
   {
     CLog::Log(LOGERROR, "CDVDVideoCodecDRMPRIME::%s - receive frame failed, ret:%d", __FUNCTION__, ret);
     return VC_ERROR;
+  }
+
+  if (HWAccelEnabled())
+  {
+    m_pFrame->format = AV_PIX_FMT_DRM_PRIME;
+
+    ret = av_hwframe_map(m_pFrame, m_pHWFrame, 0);
+    if (ret)
+      return VC_ERROR;
   }
 
   if (pVideoPicture->videoBuffer)
