@@ -25,6 +25,9 @@
 #include "cores/VideoPlayer/VideoRenderers/RenderFlags.h"
 #include "utils/log.h"
 
+#include <drm_fourcc.h>
+#include <errno.h>
+
 static CWinSystemGbmGLESContext *m_pWinSystem;
 
 CRendererDRMPRIME::CRendererDRMPRIME(std::shared_ptr<CDRMUtils> drm)
@@ -175,6 +178,7 @@ void CRendererDRMPRIME::SetVideoPlane(CVideoBufferDRMPRIME* buffer)
   {
     uint32_t handles[4] = {0}, pitches[4] = {0}, offsets[4] = {0};
     uint64_t modifier[4] = {0};
+    uint32_t flags = 0;
     int ret;
 
     // convert Prime FD to GEM handle
@@ -200,11 +204,14 @@ void CRendererDRMPRIME::SetVideoPlane(CVideoBufferDRMPRIME* buffer)
         pitches[plane] = layer->planes[plane].pitch;
         offsets[plane] = layer->planes[plane].offset;
         modifier[plane] = descriptor->objects[object].format_modifier;
+
+        if (modifier[plane] != DRM_FORMAT_MOD_NONE && modifier[plane] != DRM_FORMAT_MOD_INVALID)
+          flags |= DRM_MODE_FB_MODIFIERS;
       }
     }
 
     // add the video frame FB
-    ret = drmModeAddFB2WithModifiers(m_DRM->m_fd, buffer->GetWidth(), buffer->GetHeight(), layer->format, handles, pitches, offsets, modifier, &buffer->m_fb_id, 0);
+    ret = drmModeAddFB2WithModifiers(m_DRM->m_fd, buffer->GetWidth(), buffer->GetHeight(), layer->format, handles, pitches, offsets, modifier, &buffer->m_fb_id, flags);
     if (ret < 0)
     {
       CLog::Log(LOGERROR, "CRendererDRMPRIME::%s - failed to add drm layer %d, ret = %d", __FUNCTION__, buffer->m_fb_id, ret);
